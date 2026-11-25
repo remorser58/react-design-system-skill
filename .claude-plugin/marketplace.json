@@ -10,7 +10,7 @@
       "name": "react-design-system",
       "source": "./",
       "description": "React-only design system skill grounded in Mobbin, UIBowl, Figma, Dribbble, Behance, Pinterest, 21st.dev, horon-ai/design, and expo-glass-effect.",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "SeongJu Kim (remorser58)",
         "url": "https://github.com/remorser58"

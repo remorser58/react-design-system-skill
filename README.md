@@ -14,6 +14,8 @@ A self-contained, React-only design system and frontend architecture skill for c
 
 ## Install
 
+Download versioned archives (`react-design-system.zip` + `SHA256SUMS.txt` + `release-manifest.json`, published automatically from `main` via `.github/workflows/release.yml` matching `VERSION`) from [GitHub Releases](https://github.com/remorser58/react-design-system-skill/releases), or clone directly:
+
 ```sh
 git clone https://github.com/remorser58/react-design-system-skill.git
 # Antigravity

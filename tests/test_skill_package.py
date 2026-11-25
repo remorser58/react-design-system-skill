@@ -105,10 +105,32 @@ class SkillPackageTests(unittest.TestCase):
     def test_version_files_and_plugin_manifests_are_synchronized(self):
         version_text = (REPO / "VERSION").read_text(encoding="utf-8").strip()
         self.assertRegex(version_text, r"^\d+\.\d+\.\d+$")
+        self.assertEqual((SKILL / "VERSION").read_text(encoding="utf-8").strip(), version_text)
         plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         marketplace = json.loads((REPO / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
         self.assertEqual(plugin["version"], version_text)
         self.assertEqual(marketplace["plugins"][0]["version"], version_text)
+
+    def test_no_private_or_personal_path_leaks_exist(self):
+        forbidden = re.compile(
+            r"peek" + r"ly|insta[-_]tracker|uni" + r"club|m4" + r"mini|hyeon\.space|tokenmaxx|open" + r"codex|/Users/r3m0" + r"r5e|ghp_|github_pat_",
+            re.IGNORECASE,
+        )
+        self_path = Path(__file__).resolve()
+        hits = []
+        for path in sorted(REPO.rglob("*")):
+            if not path.is_file() or path.is_symlink() or path.resolve() == self_path:
+                continue
+            if {".git", "__pycache__", ".pytest_cache", "dist"} & set(path.relative_to(REPO).parts):
+                continue
+            raw = path.read_bytes()
+            if b"\x00" in raw[:4096]:
+                continue
+            for ln, line in enumerate(raw.decode("utf-8", errors="replace").splitlines(), 1):
+                m = forbidden.search(line)
+                if m:
+                    hits.append(f"{path.relative_to(REPO)}:{ln}: {m.group(0)!r}")
+        self.assertEqual(hits, [], "\n".join(hits))
 
 
 if __name__ == "__main__":

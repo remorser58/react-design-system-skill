@@ -33,6 +33,8 @@ jobs:
       should_release: ${{ steps.check.outputs.should_release }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Evaluate release trigger
         id: check
         env:
@@ -41,16 +43,25 @@ jobs:
           REF_NAME: ${{ github.ref }}
           BUMP_KIND: ${{ inputs.bump }}
         run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REF_NAME" != "refs/heads/main" ]; then
+            echo "workflow_dispatch releases must run from refs/heads/main (got $REF_NAME)" >&2
+            exit 1
+          fi
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "${BUMP_KIND:-none}" != "none" ]; then
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           TAG="v$(tr -d '[:space:]' < VERSION)"
-          if [[ "$REF_NAME" == refs/tags/v* ]] || ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-          else
+          if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists on $GITHUB_REPOSITORY; skipping." >> "$GITHUB_STEP_SUMMARY"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            if gh release list --limit 1 >/dev/null 2>&1; then
+              echo "should_release=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "Failed to query GitHub Releases API" >&2
+              exit 1
+            fi
           fi
 
   verify:
@@ -60,6 +71,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -96,41 +109,55 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Optional semver bump on manual dispatch
+      - name: Optional semver bump on manual dispatch (main only)
         if: github.event_name == 'workflow_dispatch' && inputs.bump != 'none'
         env:
           BUMP_KIND: ${{ inputs.bump }}
         run: |
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "Refusing bump outside refs/heads/main" >&2
+            exit 1
+          fi
           python - <<'PY'
-          import json, os, pathlib
+          import json, os, pathlib, re
           bump = os.environ["BUMP_KIND"]
+          if bump not in {"major", "minor", "patch"}:
+              raise SystemExit(f"Unsupported bump kind: {bump!r}")
           ver = pathlib.Path("VERSION").read_text(encoding="utf-8").strip()
-          major, minor, patch = (int(x) for x in ver.split("."))
+          m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", ver)
+          if not m:
+              raise SystemExit(f"VERSION must be X.Y.Z for auto-bump, got {ver!r}")
+          major, minor, patch = (int(x) for x in m.groups())
           if bump == "major":
               next_ver = f"{major + 1}.0.0"
           elif bump == "minor":
               next_ver = f"{major}.{minor + 1}.0"
           else:
               next_ver = f"{major}.{minor}.{patch + 1}"
-          pathlib.Path("VERSION").write_text(next_ver + "\n", encoding="utf-8")
+          for target in ("VERSION", "skills/react-design-system/VERSION"):
+              pathlib.Path(target).write_text(next_ver + "\n", encoding="utf-8")
           for manifest in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
               p = pathlib.Path(manifest)
               data = json.loads(p.read_text(encoding="utf-8"))
               if "version" in data:
                   data["version"] = next_ver
-              if "plugins" in data and data["plugins"]:
-                  data["plugins"][0]["version"] = next_ver
+              if "plugins" in data:
+                  for plugin in data["plugins"]:
+                      plugin["version"] = next_ver
               p.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
           print(f"Bumped {ver} -> {next_ver}")
           PY
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -p 'test_*.py' -v
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           NEXT_VER="$(tr -d '[:space:]' < VERSION)"
-          git add VERSION .claude-plugin/plugin.json .claude-plugin/marketplace.json
+          git add VERSION skills/react-design-system/VERSION .claude-plugin/plugin.json .claude-plugin/marketplace.json
           git commit -m "chore(release): bump version to v${NEXT_VER}"
           git push origin HEAD:main
 
       - name: Build deterministic release archive and manifest
+        env:
+          GH_REPO: ${{ github.repository }}
         run: |
           python - <<'PY'
           from datetime import datetime, timezone
@@ -140,36 +167,64 @@ jobs:
           version = (repo / "VERSION").read_text(encoding="utf-8").strip()
           tag = f"v{version}"
           commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          repository = os.environ["GH_REPO"]
           out = repo / "dist" / "release"
           out.mkdir(parents=True, exist_ok=True)
           skill_dir = repo / "skills" / "react-design-system"
           entries = []
+          file_inventory = {}
+          pruned_dirs = {".git", ".hg", ".svn", "__pycache__", ".pytest_cache", "node_modules"}
+          denied_names = {"HANDOFF.md", "COORDINATION.md"}
           for dirpath, dirnames, filenames in os.walk(skill_dir, followlinks=False):
               parent = pathlib.Path(dirpath)
-              dirnames[:] = sorted(d for d in dirnames if d not in {".git", "__pycache__", ".pytest_cache"})
+              dirnames[:] = sorted(d for d in dirnames if d not in pruned_dirs)
+              for d in dirnames:
+                  if (parent / d).is_symlink():
+                      raise SystemExit(f"Refusing symlink directory: {parent / d}")
               for fname in sorted(filenames):
                   if fname == ".DS_Store":
                       continue
+                  if fname in denied_names:
+                      raise SystemExit(f"Refusing internal file: {fname}")
                   p = parent / fname
                   st = p.lstat()
                   if stat.S_ISLNK(st.st_mode) or not stat.S_ISREG(st.st_mode):
                       raise SystemExit(f"Unsupported file: {p}")
                   rel = p.relative_to(skill_dir).as_posix()
-                  entries.append((f"react-design-system/{rel}", p.read_bytes(), bool(st.st_mode & 0o111)))
+                  if pathlib.Path(rel).name == "SKILL.md" and rel != "SKILL.md":
+                      raise SystemExit(f"Nested SKILL.md refused: {rel}")
+                  raw = p.read_bytes()
+                  mode = 0o755 if (rel.startswith("scripts/") and rel.endswith((".py", ".sh"))) else 0o644
+                  entries.append((f"react-design-system/{rel}", raw, mode))
+                  file_inventory[rel] = {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+
+          inv_raw = json.dumps(file_inventory, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+          payload_sha = hashlib.sha256(inv_raw).hexdigest()
+          bundle_manifest = {
+              "schema_version": "react-design-system-bundle.v1",
+              "skill": "react-design-system",
+              "version": version,
+              "repository": repository,
+              "payload_sha256": payload_sha,
+              "files": file_inventory,
+          }
+          m_bytes = (json.dumps(bundle_manifest, sort_keys=True, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+          entries.append(("react-design-system/manifest.react-design-system.json", m_bytes, 0o644))
           entries.sort(key=lambda item: item[0])
+
           zip_path = out / "react-design-system.zip"
           with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED) as zf:
-              for member, raw, is_exec in entries:
+              for member, raw, mode in entries:
                   info = zipfile.ZipInfo(member, (1980, 1, 1, 0, 0, 0))
                   info.create_system = 3
-                  info.external_attr = (stat.S_IFREG | (0o755 if is_exec else 0o644)) << 16
+                  info.external_attr = (stat.S_IFREG | mode) << 16
                   info.compress_type = zipfile.ZIP_STORED
                   zf.writestr(info, raw)
           raw_zip = zip_path.read_bytes()
           zip_sha = hashlib.sha256(raw_zip).hexdigest()
           manifest = {
               "schema_version": "react-design-system-release-manifest.v1",
-              "repository": "remorser58/react-design-system-skill",
+              "repository": repository,
               "version": version,
               "tag": tag,
               "commit": commit,
@@ -180,6 +235,7 @@ jobs:
                       "sha256": zip_sha,
                       "bytes": len(raw_zip),
                       "file_count": len(entries),
+                      "payload_sha256": payload_sha,
                       "top_directory": "react-design-system",
                   }
               },
@@ -204,6 +260,25 @@ jobs:
             echo "Release $RELEASE_TAG already exists; skipping." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          IS_LATEST="$(python - <<'PY'
+          import json, os, re, subprocess
+          target = os.environ["RELEASE_TAG"].lstrip("v")
+          t_tuple = tuple(int(x) for x in target.split(".")[:3])
+          raw = subprocess.check_output(["gh", "release", "list", "--limit", "50", "--json", "tagName"], text=True)
+          highest = t_tuple
+          for row in json.loads(raw):
+              m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", row["tagName"])
+              if m:
+                  v = tuple(int(x) for x in m.groups())
+                  if v > highest:
+                      highest = v
+          print("true" if t_tuple >= highest else "false")
+          PY
+          )"
+          LATEST_FLAG=""
+          if [ "$IS_LATEST" = "true" ]; then
+            LATEST_FLAG="--latest"
+          fi
           gh release create "$RELEASE_TAG" \
             dist/release/react-design-system.zip \
             dist/release/release-manifest.json \
@@ -211,5 +286,5 @@ jobs:
             --target "$(git rev-parse HEAD)" \
             --title "React Design System Skill $RELEASE_TAG" \
             --generate-notes \
-            --latest
-          echo "Published $RELEASE_TAG with verified assets." >> "$GITHUB_STEP_SUMMARY"
+            $LATEST_FLAG
+          echo "Published $RELEASE_TAG (latest=$IS_LATEST) with verified assets." >> "$GITHUB_STEP_SUMMARY"

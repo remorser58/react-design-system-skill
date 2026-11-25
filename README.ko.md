@@ -14,6 +14,8 @@
 
 ## 설치
 
+`main` 브랜치의 `.github/workflows/release.yml`을 통해 `VERSION`에 맞춰 자동 배포되는 [GitHub Releases](https://github.com/remorser58/react-design-system-skill/releases)에서 `react-design-system.zip`·`SHA256SUMS.txt`를 내려받거나 저장소를 직접 복제해 설치할 수 있습니다:
+
 ```sh
 git clone https://github.com/remorser58/react-design-system-skill.git
 # Antigravity
