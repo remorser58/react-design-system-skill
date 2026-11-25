@@ -1,0 +1,30 @@
+{
+  "name": "react-design-system",
+  "version": "1.0.0",
+  "description": "React-only design system skill: 4-stage visual reference mining (Mobbin, UIBowl, Figma, Dribbble, Behance, Pinterest, 21st.dev, horon-ai/design), @theme static no-card/no-shadow discipline, Base UI headless primitives, isolated Motion, LiquidGlass & expo-glass-effect, Storybook, Safe Area/OpenGraph, responsive Visual QA, and React+Vite TanStack/Zustand/ky optimization.",
+  "author": {
+    "name": "SeongJu Kim (remorser58)",
+    "url": "https://github.com/remorser58"
+  },
+  "homepage": "https://github.com/remorser58/react-design-system-skill",
+  "repository": "https://github.com/remorser58/react-design-system-skill",
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "vite",
+    "design-system",
+    "base-ui",
+    "storybook",
+    "motion",
+    "tanstack-query",
+    "tanstack-router",
+    "tanstack-table",
+    "zustand",
+    "ky",
+    "safe-area",
+    "opengraph",
+    "visual-qa",
+    "liquid-glass",
+    "expo-glass-effect"
+  ]
+}

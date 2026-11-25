@@ -1,0 +1,39 @@
+{
+  "name": "react-design-system",
+  "description": "React-only design system, Base UI headless primitives, Storybook, no-card/no-shadow surfaces, Safe Area/OpenGraph, responsive Visual QA, and React+Vite TanStack/Zustand/ky optimization skill.",
+  "owner": {
+    "name": "SeongJu Kim (remorser58)",
+    "url": "https://github.com/remorser58"
+  },
+  "plugins": [
+    {
+      "name": "react-design-system",
+      "source": "./",
+      "description": "React-only design system skill grounded in Mobbin, UIBowl, Figma, Dribbble, Behance, Pinterest, 21st.dev, horon-ai/design, and expo-glass-effect.",
+      "version": "1.0.0",
+      "author": {
+        "name": "SeongJu Kim (remorser58)",
+        "url": "https://github.com/remorser58"
+      },
+      "homepage": "https://github.com/remorser58/react-design-system-skill",
+      "repository": "https://github.com/remorser58/react-design-system-skill",
+      "license": "MIT",
+      "keywords": [
+        "react",
+        "vite",
+        "design-system",
+        "base-ui",
+        "storybook",
+        "motion",
+        "tanstack-query",
+        "tanstack-router",
+        "tanstack-table",
+        "zustand",
+        "ky",
+        "safe-area",
+        "opengraph",
+        "visual-qa"
+      ]
+    }
+  ]
+}
