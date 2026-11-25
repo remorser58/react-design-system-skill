@@ -1,6 +1,6 @@
 {
   "name": "react-design-system",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "React-only design system skill: 4-stage visual reference mining (Mobbin, UIBowl, Figma, Dribbble, Behance, Pinterest, 21st.dev, horon-ai/design), @theme static no-card/no-shadow discipline, Base UI headless primitives, isolated Motion, LiquidGlass & expo-glass-effect, Storybook, Safe Area/OpenGraph, responsive Visual QA, and React+Vite TanStack/Zustand/ky optimization.",
   "author": {
     "name": "SeongJu Kim (remorser58)",

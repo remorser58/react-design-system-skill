@@ -102,6 +102,14 @@ class SkillPackageTests(unittest.TestCase):
             for expected_code in ("HEAD_ZOOM_LOCK", "SURFACE_SHADOW_UTILITY", "SURFACE_CARD_SOUP", "GLASS_OPACITY_ZERO", "STACK_FORBIDDEN_UI_KIT", "PERF_EFFECT_FETCH_WATERFALL"):
                 self.assertIn(expected_code, codes)
 
+    def test_version_files_and_plugin_manifests_are_synchronized(self):
+        version_text = (REPO / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertRegex(version_text, r"^\d+\.\d+\.\d+$")
+        plugin = json.loads((REPO / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        marketplace = json.loads((REPO / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        self.assertEqual(plugin["version"], version_text)
+        self.assertEqual(marketplace["plugins"][0]["version"], version_text)
+
 
 if __name__ == "__main__":
     unittest.main()
